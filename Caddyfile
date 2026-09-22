@@ -8,5 +8,12 @@
 #
 # Replace app.dineshlabs.in with your actual subdomain if different.
 app.dineshlabs.in {
+    # Log requests to stdout so `docker compose logs caddy` includes the
+    # exact path and status code if an upload or WebSocket request fails.
+    log {
+        output stdout
+        format json
+    }
+
     reverse_proxy frontend:8501
 }

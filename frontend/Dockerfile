@@ -36,4 +36,12 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://127.0.0.1:8501/_stcore/health || exit 1
 
-CMD ["streamlit", "run", "streamlit_app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+# enableXsrfProtection=false: required when running behind a reverse proxy
+# (Caddy/Nginx/Traefik). Streamlit's default XSRF protection relies on a
+# same-origin cookie round-trip that reverse proxies can break, causing the
+# file uploader to fail with "AxiosError: Request failed with status code
+# 403". The backend API itself is still protected separately via the
+# X-API-Key header (see backend/auth.py) and HTTPS is enforced by the proxy,
+# so this only relaxes Streamlit's own (redundant, proxy-incompatible)
+# upload-form protection, not the actual application's security boundary.
+CMD ["streamlit", "run", "streamlit_app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.enableXsrfProtection=false", "--server.enableCORS=false"]
