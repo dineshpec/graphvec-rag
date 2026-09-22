@@ -254,9 +254,13 @@ curl http://localhost:8000/ready    # readiness: verifies Neo4j connectivity
 
 - The FAISS index directory (`backend/faiss_index`) is bind-mounted so
   ingested vectors persist across container restarts/rebuilds.
-- The SQLite document-tracking file (`backend/doc_store.sqlite3`) is also
-  bind-mounted at the file level for the same reason (the file must exist on
-  the host before the first run — an empty placeholder is fine).
+- The SQLite document-tracking DB lives at
+  `backend/faiss_index/doc_store.sqlite3` — inside the same mounted
+  directory — so it persists automatically without a separate mount. (A
+  file-level bind mount was used previously but is fragile: if the file
+  doesn't already exist on the host, Docker silently creates a directory at
+  that path instead, which breaks SQLite. Nesting it inside the
+  already-mounted directory avoids that pitfall entirely.)
 
 ### Stopping the stack
 
@@ -420,8 +424,7 @@ hybrid-rag/
 │   ├── document_store.py   # SQLite-backed document metadata store
 │   ├── ingestion.py        # PDF -> chunks -> FAISS + Neo4j, with retries
 │   ├── rag.py               # Guardrails, hybrid retrieval, generation
-│   ├── faiss_index/        # Local FAISS index (persisted)
-│   ├── doc_store.sqlite3   # Document metadata (persisted)
+│   ├── faiss_index/        # Local FAISS index + doc_store.sqlite3 (persisted)
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/

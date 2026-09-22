@@ -43,10 +43,11 @@ USER appuser
 
 EXPOSE 8000
 
-# Persist the FAISS index directory across container restarts/recreations.
-# Note: Docker's VOLUME instruction only supports directories, not single
-# files, so the SQLite doc-tracking file (backend/doc_store.sqlite3) is
-# instead persisted via a file-level bind mount in docker-compose.yml.
+# Persist the FAISS index directory (and, inside it, the SQLite doc-tracking
+# DB at faiss_index/doc_store.sqlite3) across container restarts/recreations.
+# Both live under this single directory so one bind mount in
+# docker-compose.yml covers both; see backend/config.py for why the sqlite
+# file is nested here rather than mounted separately.
 VOLUME ["/app/backend/faiss_index"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

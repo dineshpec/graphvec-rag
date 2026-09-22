@@ -107,4 +107,16 @@ graph = Neo4jGraph(
 )
 
 FAISS_INDEX_DIR = ROOT_DIR / "backend" / "faiss_index"
-DOC_STORE_DB = ROOT_DIR / "backend" / "doc_store.sqlite3"
+# Stored inside FAISS_INDEX_DIR (rather than directly under backend/) so that
+# a single directory-level Docker volume mount persists both the vector
+# index and the document metadata DB. A *file*-level bind mount for the
+# sqlite file is fragile: if the file doesn't already exist on the host
+# (e.g. a fresh git clone, since it's gitignored as a runtime artifact),
+# Docker silently creates a directory at that path instead of a file, which
+# then breaks sqlite3.connect() with "unable to open database file".
+DOC_STORE_DB = FAISS_INDEX_DIR / "doc_store.sqlite3"
+
+# Ensure the directory exists on process startup (both for local dev on a
+# fresh clone and inside the container, defense-in-depth alongside the
+# Dockerfile's own `mkdir`).
+FAISS_INDEX_DIR.mkdir(parents=True, exist_ok=True)

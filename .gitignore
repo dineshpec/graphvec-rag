@@ -31,9 +31,9 @@ htmlcov/
 # --- Runtime / generated data artifacts ---
 # These are created locally at ingestion/runtime and are environment-specific;
 # they should not be committed. Folder structure is preserved via .gitkeep.
+# (backend/faiss_index/doc_store.sqlite3 is covered by the glob below.)
 backend/faiss_index/*
 !backend/faiss_index/.gitkeep
-backend/doc_store.sqlite3
 backend/temp_uploads/*
 !backend/temp_uploads/.gitkeep
 

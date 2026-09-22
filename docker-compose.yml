@@ -15,11 +15,13 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      # Directory-level bind mount persists both the FAISS vector index and
+      # the SQLite document-tracking DB (backend/faiss_index/doc_store.sqlite3).
+      # Directory mounts are safe even if the host folder is empty/missing;
+      # file-level bind mounts are not (Docker would silently create a
+      # directory instead of a file), so avoid mounting doc_store.sqlite3
+      # directly.
       - ./backend/faiss_index:/app/backend/faiss_index
-      # File-level bind mount: persists the SQLite doc-tracking database on
-      # the host. The file must exist on the host before first run (an
-      # empty placeholder is fine; the app initializes its schema itself).
-      - ./backend/doc_store.sqlite3:/app/backend/doc_store.sqlite3
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
       interval: 30s
