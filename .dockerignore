@@ -1,0 +1,41 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python virtual environments / caches
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets - never bake real credentials into an image
+.env
+
+# Runtime/data artifacts - persisted via volumes instead of baked into the image
+backend/faiss_index/*
+!backend/faiss_index/.gitkeep
+backend/doc_store.sqlite3
+backend/temp_uploads/*
+!backend/temp_uploads/.gitkeep
+
+# Tests and dev-only assets (not needed inside the runtime images)
+tests/
+pytest.ini
+sample.pdf
+
+# Node artifacts (not currently used, excluded defensively)
+node_modules/
+
+# Editor/OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

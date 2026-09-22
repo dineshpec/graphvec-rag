@@ -1,0 +1,43 @@
+# Modern Docker Compose (Compose V2, bundled with current Docker Desktop /
+# docker-compose-plugin) no longer requires the top-level `version:` key, so
+# it is intentionally omitted here for forward compatibility. If you need to
+# run this file with a much older standalone docker-compose (<1.27), add
+# `version: "3.9"` back at the top.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: hybrid-rag-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/faiss_index:/app/backend/faiss_index
+      # File-level bind mount: persists the SQLite doc-tracking database on
+      # the host. The file must exist on the host before first run (an
+      # empty placeholder is fine; the app initializes its schema itself).
+      - ./backend/doc_store.sqlite3:/app/backend/doc_store.sqlite3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: hybrid-rag-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
