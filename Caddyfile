@@ -1,0 +1,12 @@
+# Caddy reverse proxy config for production HTTPS.
+#
+# Caddy automatically obtains and renews a free Let's Encrypt TLS
+# certificate for the domain below the first time it starts, as long as:
+#   1. The domain's DNS A record already points at this server's public IP.
+#   2. Ports 80 and 443 are reachable from the internet (see README/VPS
+#      firewall notes).
+#
+# Replace app.dineshlabs.in with your actual subdomain if different.
+app.dineshlabs.in {
+    reverse_proxy frontend:8501
+}

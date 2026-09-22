@@ -27,6 +27,7 @@ graph, served via a **FastAPI** backend and a **Streamlit** chat frontend.
 - [1. Configure environment variables](#1-configure-environment-variables)
 - [Running without Docker (local Python)](#running-without-docker-local-python)
 - [Running with Docker](#running-with-docker)
+- [Production deployment: HTTPS with a custom domain](#production-deployment-https-with-a-custom-domain)
 - [Using the app](#using-the-app)
 - [API reference](#api-reference)
 - [Guardrails](#guardrails)
@@ -229,19 +230,30 @@ docker compose up --build
 ```
 
 This builds:
-- `backend` — FastAPI app on **http://localhost:8000**
-- `frontend` — Streamlit UI on **http://localhost:8501**
+- `backend` — FastAPI app, internal only (`http://backend:8000` on the Docker network)
+- `frontend` — Streamlit UI, internal only (`http://frontend:8501` on the Docker network)
+- `caddy` — reverse proxy, the only publicly exposed service (ports 80/443)
 
 The frontend automatically talks to the backend via the internal Docker
 network (`BACKEND_URL=http://backend:8000`); the frontend container only
-starts once the backend's healthcheck reports healthy.
+starts once the backend's healthcheck reports healthy. Caddy proxies
+public HTTP/HTTPS traffic to the frontend (see
+[Production deployment: HTTPS with a custom domain](#production-deployment-https-with-a-custom-domain)).
 
-### 2. Exposed ports
+> **Local development without a domain:** if you just want to hit the app
+> at `localhost` (no TLS/domain), you can skip Caddy — temporarily add back
+> `ports: ["8000:8000"]` under `backend` and `ports: ["8501:8501"]` under
+> `frontend` in `docker-compose.yml`, or run `docker compose up backend
+> frontend` (without `caddy`) and browse to
+> `http://localhost:8501` directly.
 
-| Service  | Container port | Host port | URL                       |
-|----------|-----------------|-----------|---------------------------|
-| backend  | 8000            | 8000      | http://localhost:8000     |
-| frontend | 8501            | 8501      | http://localhost:8501     |
+### 2. Exposed ports (production, behind Caddy)
+
+| Service  | Container port | Host port | Publicly reachable at        |
+|----------|-----------------|-----------|-------------------------------|
+| caddy    | 80, 443         | 80, 443   | `https://<your-domain>`       |
+| backend  | 8000            | *(none)*  | internal only                 |
+| frontend | 8501            | *(none)*  | internal only                 |
 
 ### 3. Check health
 
@@ -249,6 +261,7 @@ starts once the backend's healthcheck reports healthy.
 curl http://localhost:8000/health   # liveness: process is up
 curl http://localhost:8000/ready    # readiness: verifies Neo4j connectivity
 ```
+(Run from inside the `backend` container, e.g. `docker compose exec backend curl http://127.0.0.1:8000/health`, since the port is no longer published to the host.)
 
 ### Persistence
 
@@ -270,7 +283,72 @@ docker compose down
 
 ---
 
-## Using the app
+## Production deployment: HTTPS with a custom domain
+
+The compose stack includes a `caddy` service ([Caddyfile](Caddyfile)) that
+automatically provisions and renews a free TLS certificate (Let's Encrypt)
+for your domain and reverse-proxies public traffic to the `frontend`
+container. This is the recommended way to expose the app on a VPS.
+
+### 1. Point DNS at your VPS
+
+In your domain registrar's DNS panel (e.g. Hostinger), add an **A record**:
+
+| Type | Name (host) | Value            |
+|------|-------------|-------------------|
+| A    | `app`       | `<your VPS public IP>` |
+
+This makes `app.<your-domain>` resolve to your server. DNS changes can take
+a few minutes to propagate; verify with `nslookup app.<your-domain>` before
+continuing.
+
+### 2. Open ports 80 and 443
+
+Caddy needs both ports reachable from the internet — port 80 for the
+Let's Encrypt HTTP-01 challenge (and to redirect to HTTPS), port 443 for
+TLS traffic itself.
+
+```bash
+# UFW example (adjust for your VPS's firewall)
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+```
+Also check your hosting provider's control-panel firewall/security-group
+rules (e.g. Hostinger VPS firewall) — cloud-level firewalls are separate
+from the OS firewall and both must allow 80/443.
+
+### 3. Set the domain in the Caddyfile
+
+Edit [Caddyfile](Caddyfile) and replace the placeholder domain with your
+own:
+
+```
+app.<your-domain> {
+    reverse_proxy frontend:8501
+}
+```
+
+### 4. Start the stack
+
+```bash
+docker compose up -d --build
+docker compose logs -f caddy
+```
+
+On first start, Caddy automatically requests a certificate from Let's
+Encrypt for the domain in the Caddyfile — this requires DNS to already be
+pointing at the server (step 1) and ports 80/443 to be open (step 2). Watch
+the `caddy` logs for `certificate obtained successfully`.
+
+Once it succeeds, browse to `https://app.<your-domain>` — you should see
+the Streamlit UI served over HTTPS with a valid, browser-trusted padlock.
+
+### 5. Renewals
+
+Caddy renews certificates automatically in the background for as long as
+the stack keeps running — no manual `certbot renew` cron job needed.
+
+
 
 1. Open the Streamlit UI (`http://localhost:8501`).
 2. If auth is enabled, paste your `API_KEY` into the sidebar's "Backend API
@@ -434,6 +512,7 @@ hybrid-rag/
 ├── tests/                  # Offline/mocked pytest suite
 ├── .github/workflows/ci.yml
 ├── docker-compose.yml
+├── Caddyfile               # Reverse proxy + automatic HTTPS config
 ├── .env.example
 └── README.md
 ```

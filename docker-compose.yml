@@ -12,8 +12,12 @@ services:
     image: hybrid-rag-backend
     env_file:
       - .env
-    ports:
-      - "8000:8000"
+    # No `ports:` mapping: the backend is only reachable from other
+    # containers on the internal Compose network (e.g. by `frontend`, via
+    # BACKEND_URL=http://backend:8000 below). It is intentionally not
+    # exposed directly to the host/internet — only Caddy's 80/443 are
+    # public. If you need to call the API directly (e.g. via curl/Postman)
+    # while developing, temporarily add back `ports: ["8000:8000"]`.
     volumes:
       # Directory-level bind mount persists both the FAISS vector index and
       # the SQLite document-tracking DB (backend/faiss_index/doc_store.sqlite3).
@@ -40,6 +44,26 @@ services:
         condition: service_healthy
     environment:
       BACKEND_URL: http://backend:8000
-    ports:
-      - "8501:8501"
+    # No `ports:` mapping either: only Caddy is exposed publicly and it
+    # reverse-proxies to `frontend:8501` over the internal network (see
+    # Caddyfile). This avoids Streamlit ever being reachable over plain
+    # HTTP/without TLS.
     restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
+
