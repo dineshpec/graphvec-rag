@@ -19,7 +19,12 @@ import streamlit as st
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 BACKEND_API_KEY_DEFAULT = os.getenv("BACKEND_API_KEY", "")
 
-UPLOAD_TIMEOUT = 120
+try:
+    UPLOAD_TIMEOUT = float(os.getenv("UPLOAD_TIMEOUT_SECONDS", "600"))
+    if UPLOAD_TIMEOUT <= 0:
+        raise ValueError
+except ValueError:
+    raise RuntimeError("UPLOAD_TIMEOUT_SECONDS must be a positive number.")
 QUERY_TIMEOUT = 60
 HEALTH_TIMEOUT = 5
 DOCS_TIMEOUT = 15
@@ -186,7 +191,11 @@ with documents_tab:
                 else:
                     st.error(f"Ingestion failed ({response.status_code}): {_extract_error_detail(response)}")
             except requests.exceptions.Timeout:
-                st.error("Upload timed out. The document may be too large or the backend is busy.")
+                st.error(
+                    f"Upload timed out after {UPLOAD_TIMEOUT:g} seconds. "
+                    "Ingestion is still synchronous and may take longer for documents "
+                    "with many pages. Check the backend logs before retrying."
+                )
             except requests.exceptions.ConnectionError:
                 st.error("Could not connect to the backend to upload the document.")
             except requests.exceptions.RequestException as e:

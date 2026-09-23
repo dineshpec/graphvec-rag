@@ -44,6 +44,7 @@ services:
         condition: service_healthy
     environment:
       BACKEND_URL: http://backend:8000
+      UPLOAD_TIMEOUT_SECONDS: ${UPLOAD_TIMEOUT_SECONDS:-600}
     # No `ports:` mapping either: only Caddy is exposed publicly and it
     # reverse-proxies to `frontend:8501` over the internal network (see
     # Caddyfile). This avoids Streamlit ever being reachable over plain
@@ -66,4 +67,3 @@ services:
 volumes:
   caddy_data:
   caddy_config:
-

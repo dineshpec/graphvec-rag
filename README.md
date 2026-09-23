@@ -464,6 +464,7 @@ See `.env.example` for the full annotated list. Highlights:
 | `RETRIEVAL_K`          | `3`                                          | Top-k vector chunks per query               |
 | `GRAPH_RESULT_LIMIT`   | `20`                                         | Max graph triplets per query                |
 | `MAX_UPLOAD_MB`        | `25`                                         | Max accepted PDF size                       |
+| `UPLOAD_TIMEOUT_SECONDS` | `600`                                      | Frontend wait time for synchronous PDF ingestion |
 | `ENABLE_EVALS`         | `true`                                       | Toggle the advisory evals LLM call (see [Guardrails](#guardrails)) |
 | `LOG_LEVEL`            | `INFO`                                       | Python logging level (JSON structured logs) |
 
@@ -487,6 +488,11 @@ See `.env.example` for the full annotated list. Highlights:
   covered by the uploaded PDF(s); upload a relevant document first.
 - **Upload fails with 413** — the PDF exceeds `MAX_UPLOAD_MB` (default 25MB);
   raise it in `.env` and restart the backend.
+- **Upload times out** — ingestion extracts embeddings and graph data
+  synchronously, so a PDF with many pages or chunks can take several minutes.
+  Set `UPLOAD_TIMEOUT_SECONDS` (default 600) in the frontend environment and
+  restart Streamlit. Check the backend logs before retrying, because a request
+  that timed out in the UI may still be finishing on the backend.
 
 ---
 
