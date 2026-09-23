@@ -236,13 +236,17 @@ def test_upload_success(client, api_key_headers, mocker):
             )
         },
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 202
     body = resp.json()
-    assert body["status"] == "success"
-    assert body["details"]["chunks_indexed"] == 2
+    assert body["status"] == "processing"
+
+    document = app_module.document_store.get_document(body["doc_id"])
+    assert document["status"] == "ready"
+    assert document["chunks_indexed"] == 2
+    assert document["graph_documents_extracted"] == 1
 
 
-def test_upload_ingestion_failure_returns_500(client, api_key_headers, mocker):
+def test_upload_ingestion_failure_is_recorded(client, api_key_headers, mocker):
     mocker.patch(
         "backend.app.ingest_pdf", side_effect=ValueError("could not parse pdf")
     )
@@ -257,8 +261,13 @@ def test_upload_ingestion_failure_returns_500(client, api_key_headers, mocker):
             )
         },
     )
-    assert resp.status_code == 500
-    assert "could not parse pdf" not in resp.text
+    assert resp.status_code == 202
+    body = resp.json()
+    assert body["status"] == "processing"
+
+    document = app_module.document_store.get_document(body["doc_id"])
+    assert document["status"] == "failed"
+    assert document["error"] == "could not parse pdf"
 
 
 # ---------------------------------------------------------------------------

@@ -185,8 +185,11 @@ with documents_tab:
                     headers=_headers(),
                     timeout=UPLOAD_TIMEOUT,
                 )
-                if response.status_code == 200:
-                    st.success(f"Ingested '{uploaded_file.name}' successfully.")
+                if response.status_code == 202:
+                    st.success(
+                        f"Queued '{uploaded_file.name}' for ingestion. "
+                        "Use Refresh below to check its status."
+                    )
                     st.session_state.documents = None  # force refresh below
                 else:
                     st.error(f"Ingestion failed ({response.status_code}): {_extract_error_detail(response)}")

@@ -2,9 +2,10 @@ import shutil
 import time
 import uuid
 from pathlib import Path
+from threading import Lock
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -46,6 +47,7 @@ Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_sch
 
 UPLOAD_DIR = Path(__file__).resolve().parent / "temp_uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+INGESTION_LOCK = Lock()
 
 
 @app.middleware("http")
@@ -126,10 +128,30 @@ def readiness_check():
     return JSONResponse(status_code=status_code, content={"ready": ready, "checks": checks})
 
 
-@app.post("/api/v1/upload", dependencies=[Depends(require_api_key)])
+def _ingest_document(temp_path: Path, doc_id: str) -> None:
+    """Runs ingestion off the request thread and records its final status."""
+    try:
+        with INGESTION_LOCK:
+            result = ingest_pdf(str(temp_path), doc_id)
+        document_store.mark_success(
+            doc_id, result["chunks_indexed"], result["graph_documents_extracted"]
+        )
+    except Exception as e:
+        document_store.mark_failed(doc_id, str(e))
+        logger.exception("ingestion_failed", extra={"doc_id": doc_id})
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+@app.post("/api/v1/upload", dependencies=[Depends(require_api_key)], status_code=202)
 @limiter.limit(settings.RATE_LIMIT_UPLOAD)
-async def upload_pdf(request: Request, file: UploadFile = File(...)):
-    """Receives a PDF, writes to disk, and executes dual ingestion."""
+async def upload_pdf(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+):
+    """Receives a PDF and queues dual ingestion in a worker thread."""
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
@@ -149,25 +171,14 @@ async def upload_pdf(request: Request, file: UploadFile = File(...)):
     try:
         with open(temp_path, "wb") as buffer:
             buffer.write(contents)
-
-        result = ingest_pdf(str(temp_path), doc_id)
-        document_store.mark_success(
-            doc_id, result["chunks_indexed"], result["graph_documents_extracted"]
-        )
-        return {
-            "doc_id": doc_id,
-            "filename": file.filename,
-            "status": "success",
-            "details": result
-        }
+        background_tasks.add_task(_ingest_document, temp_path, doc_id)
+        return {"doc_id": doc_id, "filename": file.filename, "status": "processing"}
     except Exception as e:
         document_store.mark_failed(doc_id, str(e))
-        logger.exception("ingestion_failed", extra={"doc_id": doc_id})
-        raise HTTPException(status_code=500, detail="Ingestion failed. Please check the file and try again.")
-    finally:
-        # Clean up temporary upload file to conserve disk space
+        logger.exception("upload_queue_failed", extra={"doc_id": doc_id})
         if temp_path.exists():
             temp_path.unlink()
+        raise HTTPException(status_code=500, detail="Could not queue ingestion. Please try again.")
 
 
 @app.get("/api/v1/documents", response_model=list[DocumentResponse], dependencies=[Depends(require_api_key)])
@@ -214,9 +225,18 @@ def handle_query(request: Request, payload: QueryRequest):
 
 
 # --- Backward-compatible unversioned aliases (deprecated) ---
-@app.post("/upload", dependencies=[Depends(require_api_key)], include_in_schema=False)
-async def upload_pdf_legacy(request: Request, file: UploadFile = File(...)):
-    return await upload_pdf(request, file)
+@app.post(
+    "/upload",
+    dependencies=[Depends(require_api_key)],
+    include_in_schema=False,
+    status_code=202,
+)
+async def upload_pdf_legacy(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+):
+    return await upload_pdf(request, background_tasks, file)
 
 
 @app.post("/query", response_model=QueryResponse, dependencies=[Depends(require_api_key)], include_in_schema=False)

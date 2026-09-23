@@ -97,8 +97,9 @@ OpenAI Embeddings       Entity / Relationship
     Relevance    ness     Relevance
 ```
 
-- **Ingestion** (`POST /api/v1/upload`): a PDF is split into chunks, embedded
-  and stored in FAISS, and passed through an LLM graph transformer to extract
+- **Ingestion** (`POST /api/v1/upload`): the upload is accepted with `202`
+  and queued as a background task. The PDF is split into chunks, embedded and
+  stored in FAISS, and passed through an LLM graph transformer to extract
   entities/relationships into Neo4j. Every chunk is tagged with a `doc_id` so
   it can later be looked up or deleted precisely from both stores.
 - **Input Guardrail**: a fast, deterministic regex check for prompt-injection
@@ -375,7 +376,7 @@ in `.env` (if `API_KEY` is empty, auth is disabled).
 | GET    | `/health`                     | —    | Liveness probe                                     |
 | GET    | `/ready`                      | —    | Readiness probe (checks Neo4j connectivity)        |
 | GET    | `/metrics`                    | —    | Prometheus metrics                                 |
-| POST   | `/api/v1/upload`              | ✅   | Upload + ingest a PDF (multipart, field `file`)    |
+| POST   | `/api/v1/upload`              | ✅   | Queue PDF ingestion (`202`; multipart field `file`) |
 | GET    | `/api/v1/documents`           | ✅   | List ingested documents and their status           |
 | DELETE | `/api/v1/documents/{doc_id}`  | ✅   | Delete a document from FAISS + Neo4j + metadata    |
 | POST   | `/api/v1/query`               | ✅   | Ask a question (`{"query": "..."}`)                |
@@ -488,11 +489,10 @@ See `.env.example` for the full annotated list. Highlights:
   covered by the uploaded PDF(s); upload a relevant document first.
 - **Upload fails with 413** — the PDF exceeds `MAX_UPLOAD_MB` (default 25MB);
   raise it in `.env` and restart the backend.
-- **Upload times out** — ingestion extracts embeddings and graph data
-  synchronously, so a PDF with many pages or chunks can take several minutes.
-  Set `UPLOAD_TIMEOUT_SECONDS` (default 600) in the frontend environment and
-  restart Streamlit. Check the backend logs before retrying, because a request
-  that timed out in the UI may still be finishing on the backend.
+- **A document remains `processing`** — ingestion runs in the background and
+  can take several minutes for PDFs with many pages or chunks. Use **Refresh**
+  to check its status. If it never completes, inspect the backend log for the
+  recorded OpenAI or Neo4j error before retrying.
 
 ---
 
